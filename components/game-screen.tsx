@@ -1,3 +1,4 @@
+// File: components/GameScreen.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -24,6 +25,36 @@ interface Question {
    accessCode: string;
 }
 
+type BrowserSpeechRecognition = InstanceType<typeof window.SpeechRecognition>;
+
+type BrowserSpeechRecognitionEvent = Event & {
+   readonly resultIndex: number;
+   readonly results: {
+      readonly [index: number]: {
+         readonly [index: number]: {
+            transcript: string;
+            confidence: number;
+         };
+         length: number;
+         isFinal: boolean;
+      };
+      length: number;
+   };
+};
+
+type BrowserSpeechRecognitionErrorEvent = Event & {
+   readonly error:
+      | "no-speech"
+      | "aborted"
+      | "audio-capture"
+      | "network"
+      | "not-allowed"
+      | "service-not-allowed"
+      | "bad-grammar"
+      | "language-not-supported";
+   readonly message: string;
+};
+
 export default function GameScreen({ team, questionIndex, onQuestionComplete, onRestart }: GameScreenProps) {
    const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
    const [showResult, setShowResult] = useState(false);
@@ -32,7 +63,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
    const [accessCode, setAccessCode] = useState("");
    const [codeError, setCodeError] = useState("");
    const [isListening, setIsListening] = useState(false);
-   const [recognition, setRecognition] = useState<any>(null);
+   const [recognition, setRecognition] = useState<BrowserSpeechRecognition | null>(null);
    const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt">("prompt");
    const [voiceError, setVoiceError] = useState<string>("");
 
@@ -40,24 +71,19 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
    const currentQuestion: Question | undefined = questions[teamKey]?.[questionIndex];
 
    useEffect(() => {
-      // Check for speech recognition support
       if (typeof window !== "undefined") {
-         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-         if (SpeechRecognition) {
-            const recognitionInstance = new SpeechRecognition();
+         const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+         if (SpeechRecognitionConstructor) {
+            const recognitionInstance = new SpeechRecognitionConstructor();
             recognitionInstance.continuous = false;
             recognitionInstance.interimResults = false;
             recognitionInstance.lang = "es-ES";
 
-            recognitionInstance.onresult = (event: any) => {
+            recognitionInstance.onresult = (event: BrowserSpeechRecognitionEvent) => {
                const transcript = event.results[0][0].transcript.toLowerCase();
-               console.log("Heard:", transcript);
-
-               // Check for roar/scream words in Spanish and English
                const roarWords = ["rugir", "rugido", "grito", "ahhh", "roar", "gritar", "aaah", "uhhh", "ahh", "ohh"];
                const hasRoar = roarWords.some((word) => transcript.includes(word));
-
-               // Also accept any sound longer than 2 characters or with vowel sounds
                const hasLongSound = transcript.length > 2 || /[aeiouáéíóú]{2,}/i.test(transcript);
 
                if (hasRoar || hasLongSound) {
@@ -70,7 +96,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                setIsListening(false);
             };
 
-            recognitionInstance.onerror = (event: any) => {
+            recognitionInstance.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
                console.error("Speech recognition error:", event.error);
                setIsListening(false);
 
@@ -100,19 +126,13 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                setTimeout(() => setVoiceError(""), 5000);
             };
 
-            recognitionInstance.onend = () => {
-               setIsListening(false);
-            };
-
-            recognitionInstance.onstart = () => {
-               setVoiceError("");
-            };
+            recognitionInstance.onend = () => setIsListening(false);
+            recognitionInstance.onstart = () => setVoiceError("");
 
             setRecognition(recognitionInstance);
          }
       }
 
-      // Request microphone permission
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
          navigator.mediaDevices
             .getUserMedia({ audio: true })
@@ -123,29 +143,10 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       }
    }, []);
 
-   if (!currentQuestion) {
-      return (
-         <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-500 via-purple-600 to-green-500">
-            <Card className="w-full max-w-md shadow-2xl border-4 border-yellow-400">
-               <CardContent className="p-6 text-center">
-                  <div className="text-6xl mb-4">😱</div>
-                  <p className="text-red-500 mb-4 text-lg font-semibold">¡Ups! Pregunta no encontrada</p>
-                  <Button
-                     onClick={onRestart}
-                     className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition-all duration-300 hover:scale-105"
-                  >
-                     🏠 Volver al inicio
-                  </Button>
-               </CardContent>
-            </Card>
-         </div>
-      );
-   }
-
    const handleAnswerSelect = (answerIndex: number) => {
       if (showResult) return;
       setSelectedAnswer(answerIndex);
-      setVoiceError(""); // Clear any previous voice errors
+      setVoiceError("");
    };
 
    const startListening = () => {
@@ -176,19 +177,14 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
 
    const handleConfirmAnswer = () => {
       if (selectedAnswer === null) return;
-
-      const correct = selectedAnswer === currentQuestion.correctAnswer;
+      const correct = selectedAnswer === currentQuestion?.correctAnswer;
       setIsCorrect(correct);
       setShowResult(true);
-
-      if (correct) {
-         setTimeout(() => setShowMap(true), 1500);
-      }
+      if (correct) setTimeout(() => setShowMap(true), 1500);
    };
 
    const handleCodeSubmit = () => {
-      if (accessCode.toLowerCase() === currentQuestion.accessCode.toLowerCase()) {
-         // Pass true to indicate the answer was correct (they reached the code step)
+      if (accessCode.toLowerCase() === currentQuestion?.accessCode.toLowerCase()) {
          onQuestionComplete(true);
       } else {
          setCodeError("❌ Código incorrecto. ¡Inténtalo de nuevo!");
@@ -205,6 +201,10 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       setCodeError("");
       setVoiceError("");
    };
+
+   if (!currentQuestion) {
+      return null;
+   }
 
    return (
       <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-green-500 p-4 relative overflow-hidden">

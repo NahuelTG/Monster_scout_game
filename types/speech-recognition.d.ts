@@ -140,4 +140,34 @@ interface SpeechGrammar {
    weight: number;
 }
 
+// Add before component or move to a types file
+
+type SpeechRecognitionResult = {
+   readonly isFinal: boolean;
+   readonly length: number;
+   item(index: number): SpeechRecognitionAlternative;
+   [index: number]: SpeechRecognitionAlternative;
+};
+
+type SpeechRecognitionAlternative = {
+   readonly transcript: string;
+   readonly confidence: number;
+};
+
+type SpeechRecognitionResultList = {
+   readonly length: number;
+   item(index: number): SpeechRecognitionResult;
+   [index: number]: SpeechRecognitionResult;
+};
+
+interface SpeechRecognitionEvent extends Event {
+   readonly resultIndex: number;
+   readonly results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+   readonly error: string;
+   readonly message: string;
+}
+
 export {};
