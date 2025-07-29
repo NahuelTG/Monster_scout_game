@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { questions } from "@/data/questions";
-import { ExternalLink, MapPin, Lock, Unlock, Mic, MicOff } from "lucide-react";
+import { Lock, Unlock, Mic, MicOff } from "lucide-react";
 
 interface GameScreenProps {
    team: string;
@@ -21,6 +21,8 @@ interface Question {
    question: string;
    options: string[];
    correctAnswer: number;
+   locationTitle: string;
+   locationDescription: string;
    mapLink: string;
    accessCode: string;
 }
@@ -185,7 +187,9 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
 
    const handleCodeSubmit = () => {
       if (accessCode.toLowerCase() === currentQuestion?.accessCode.toLowerCase()) {
+         // Código correcto - avanza a la siguiente pregunta
          onQuestionComplete(true);
+         resetState();
       } else {
          setCodeError("❌ Código incorrecto. ¡Inténtalo de nuevo!");
          setTimeout(() => setCodeError(""), 3000);
@@ -193,6 +197,10 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
    };
 
    const handleTryAgain = () => {
+      resetState();
+   };
+
+   const resetState = () => {
       setSelectedAnswer(null);
       setShowResult(false);
       setIsCorrect(false);
@@ -223,7 +231,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                {/* Header con mejor diseño */}
                <div className="text-center mb-8">
                   <div className="bg-white/20 backdrop-blur-sm rounded-full py-3 px-6 mb-4 border-2 border-white/30 shadow-xl">
-                     <h1 className="text-xl font-bold text-white drop-shadow-lg">🎯 Pregunta {questionIndex + 1} de 4</h1>
+                     <h1 className="text-xl font-bold text-white drop-shadow-lg">🎯 Sección {questionIndex + 1} de 4</h1>
                   </div>
 
                   {/* Progress bar mejorada */}
@@ -336,22 +344,6 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                                  {showMap && (
                                     <div className="space-y-4">
                                        <Card className="bg-gradient-to-r from-green-100 to-emerald-100 border-4 border-green-400 shadow-xl">
-                                          <CardContent className="p-4">
-                                             <div className="flex items-center justify-center space-x-2 mb-4">
-                                                <MapPin className="text-green-600 w-6 h-6" />
-                                                <span className="font-bold text-green-800 text-lg">🗺️ Ubicación Desbloqueada</span>
-                                             </div>
-                                             <Button
-                                                onClick={() => window.open(currentQuestion.mapLink, "_blank")}
-                                                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 rounded-full shadow-lg transform transition-all duration-300 hover:scale-105"
-                                             >
-                                                <ExternalLink className="w-5 h-5 mr-2" />
-                                                📍 Ver en Google Maps
-                                             </Button>
-                                          </CardContent>
-                                       </Card>
-
-                                       <Card className="bg-gradient-to-r from-yellow-100 to-orange-100 border-4 border-yellow-400 shadow-xl">
                                           <CardContent className="p-4">
                                              <div className="flex items-center justify-center space-x-2 mb-4">
                                                 <Lock className="text-yellow-600 w-6 h-6" />
