@@ -1,12 +1,13 @@
-// File: components/GameScreen.tsx
+// components/GameScreen.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { questions } from "@/data/questions";
 import { Lock, Unlock, Mic, MicOff } from "lucide-react";
+import useMicrophone from "@/hooks/useMicrophone";
 
 interface GameScreenProps {
    team: string;
@@ -27,123 +28,70 @@ interface Question {
    accessCode: string;
 }
 
-type BrowserSpeechRecognition = InstanceType<typeof window.SpeechRecognition>;
-
-type BrowserSpeechRecognitionEvent = Event & {
-   readonly resultIndex: number;
-   readonly results: {
-      readonly [index: number]: {
-         readonly [index: number]: {
-            transcript: string;
-            confidence: number;
-         };
-         length: number;
-         isFinal: boolean;
-      };
-      length: number;
-   };
-};
-
-type BrowserSpeechRecognitionErrorEvent = Event & {
-   readonly error:
-      | "no-speech"
-      | "aborted"
-      | "audio-capture"
-      | "network"
-      | "not-allowed"
-      | "service-not-allowed"
-      | "bad-grammar"
-      | "language-not-supported";
-   readonly message: string;
-};
-
 export default function GameScreen({ team, questionIndex, onQuestionComplete, onRestart }: GameScreenProps) {
+   // 🎯 Estados locales del componente
    const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
    const [showResult, setShowResult] = useState(false);
    const [isCorrect, setIsCorrect] = useState(false);
    const [showMap, setShowMap] = useState(false);
    const [accessCode, setAccessCode] = useState("");
    const [codeError, setCodeError] = useState("");
-   const [isListening, setIsListening] = useState(false);
-   const [recognition, setRecognition] = useState<BrowserSpeechRecognition | null>(null);
-   const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt">("prompt");
-   const [voiceError, setVoiceError] = useState<string>("");
+   const [voiceError, setVoiceError] = useState("");
+   const [isWaitingForRoar, setIsWaitingForRoar] = useState(false);
 
    const teamKey = team as TeamKey;
    const currentQuestion: Question | undefined = questions[teamKey]?.[questionIndex];
+   const { isListening, volume, error, startListening, stopListening } = useMicrophone();
+
+   const ROAR_THRESHOLD = 30;
+   const ROAR_TIMEOUT = 5000;
+
+   const handleConfirmAnswer = useCallback(() => {
+      if (selectedAnswer === null) return;
+
+      const correct = selectedAnswer === currentQuestion?.correctAnswer;
+      setIsCorrect(correct);
+      setShowResult(true);
+
+      if (correct) {
+         setTimeout(() => setShowMap(true), 1500);
+      }
+   }, [selectedAnswer, currentQuestion]);
 
    useEffect(() => {
-      if (typeof window !== "undefined") {
-         const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!isWaitingForRoar || !isListening) return;
 
-         if (SpeechRecognitionConstructor) {
-            const recognitionInstance = new SpeechRecognitionConstructor();
-            recognitionInstance.continuous = false;
-            recognitionInstance.interimResults = false;
-            recognitionInstance.lang = "es-ES";
+      // Si el volumen supera el umbral, confirmar respuesta
+      if (volume > ROAR_THRESHOLD) {
+         handleConfirmAnswer();
+         setIsWaitingForRoar(false);
+         setVoiceError("");
+         stopListening();
+      }
+   }, [volume, isWaitingForRoar, isListening, handleConfirmAnswer, stopListening]);
 
-            recognitionInstance.onresult = (event: BrowserSpeechRecognitionEvent) => {
-               const transcript = event.results[0][0].transcript.toLowerCase();
-               const roarWords = ["rugir", "rugido", "grito", "ahhh", "roar", "gritar", "aaah", "uhhh", "ahh", "ohh"];
-               const hasRoar = roarWords.some((word) => transcript.includes(word));
-               const hasLongSound = transcript.length > 2 || /[aeiouáéíóú]{2,}/i.test(transcript);
+   useEffect(() => {
+      if (!isWaitingForRoar) return;
 
-               if (hasRoar || hasLongSound) {
-                  handleConfirmAnswer();
-                  setVoiceError("");
-               } else {
-                  setVoiceError("🦁 ¡Necesito un rugido más fuerte! Inténtalo de nuevo.");
-                  setTimeout(() => setVoiceError(""), 3000);
-               }
-               setIsListening(false);
-            };
-
-            recognitionInstance.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
-               console.error("Speech recognition error:", event.error);
-               setIsListening(false);
-
-               let errorMessage = "";
-               switch (event.error) {
-                  case "network":
-                     errorMessage = "🌐 Error de conexión. ¿Puedes intentar de nuevo?";
-                     break;
-                  case "not-allowed":
-                     errorMessage = "🎤 Necesitas dar permiso al micrófono";
-                     setMicPermission("denied");
-                     break;
-                  case "no-speech":
-                     errorMessage = "🔇 No te escuché. ¡Rugue más fuerte!";
-                     break;
-                  case "audio-capture":
-                     errorMessage = "🎤 Problema con el micrófono";
-                     break;
-                  case "service-not-allowed":
-                     errorMessage = "⚠️ Servicio de voz no disponible";
-                     break;
-                  default:
-                     errorMessage = `❌ Error de voz: ${event.error}`;
-               }
-
-               setVoiceError(errorMessage);
-               setTimeout(() => setVoiceError(""), 5000);
-            };
-
-            recognitionInstance.onend = () => setIsListening(false);
-            recognitionInstance.onstart = () => setVoiceError("");
-
-            setRecognition(recognitionInstance);
+      const timeout = setTimeout(() => {
+         if (isWaitingForRoar) {
+            setVoiceError("🦁 ¡Tiempo agotado! Necesito un rugido más fuerte.");
+            setIsWaitingForRoar(false);
+            stopListening();
+            setTimeout(() => setVoiceError(""), 3000);
          }
-      }
+      }, ROAR_TIMEOUT);
 
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-         navigator.mediaDevices
-            .getUserMedia({ audio: true })
-            .then(() => setMicPermission("granted"))
-            .catch(() => setMicPermission("denied"));
-      } else {
-         setMicPermission("denied");
+      return () => clearTimeout(timeout);
+   }, [isWaitingForRoar, stopListening]);
+
+   useEffect(() => {
+      if (error) {
+         setVoiceError(error);
+         setIsWaitingForRoar(false);
+         setTimeout(() => setVoiceError(""), 5000);
       }
-   }, []);
+   }, [error]);
 
    const handleAnswerSelect = (answerIndex: number) => {
       if (showResult) return;
@@ -151,43 +99,28 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       setVoiceError("");
    };
 
-   const startListening = () => {
+   const handleStartRoarDetection = async () => {
       if (selectedAnswer === null) return;
-      if (micPermission !== "granted") {
-         setVoiceError("🎤 Necesitas dar permiso al micrófono para usar esta función");
-         setTimeout(() => setVoiceError(""), 3000);
-         return;
-      }
-      if (!recognition) {
-         setVoiceError("❌ Tu navegador no soporta reconocimiento de voz. Prueba con Chrome.");
-         setTimeout(() => setVoiceError(""), 3000);
-         return;
-      }
-
-      setIsListening(true);
-      setVoiceError("");
 
       try {
-         recognition.start();
-      } catch (error) {
-         console.error("Error starting recognition:", error);
-         setIsListening(false);
-         setVoiceError("❌ Error al iniciar el reconocimiento de voz");
+         setVoiceError("");
+         setIsWaitingForRoar(true);
+         await startListening();
+      } catch (err) {
+         setVoiceError("❌ Error al acceder al micrófono");
+         setIsWaitingForRoar(false);
          setTimeout(() => setVoiceError(""), 3000);
+         console.error(err);
       }
    };
 
-   const handleConfirmAnswer = () => {
-      if (selectedAnswer === null) return;
-      const correct = selectedAnswer === currentQuestion?.correctAnswer;
-      setIsCorrect(correct);
-      setShowResult(true);
-      if (correct) setTimeout(() => setShowMap(true), 1500);
+   const handleStopRoarDetection = () => {
+      setIsWaitingForRoar(false);
+      stopListening();
    };
 
    const handleCodeSubmit = () => {
       if (accessCode.toLowerCase() === currentQuestion?.accessCode.toLowerCase()) {
-         // Código correcto - avanza a la siguiente pregunta
          onQuestionComplete(true);
          resetState();
       } else {
@@ -208,7 +141,20 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       setAccessCode("");
       setCodeError("");
       setVoiceError("");
+      setIsWaitingForRoar(false);
+      stopListening();
    };
+
+   const getVolumeStatus = () => {
+      if (!isWaitingForRoar) return { text: "", color: "gray" };
+
+      if (volume < 10) return { text: "🤫 Muy bajito...", color: "blue" };
+      if (volume < 20) return { text: "🗣️ Más fuerte...", color: "green" };
+      if (volume < ROAR_THRESHOLD) return { text: "📢 ¡Casi ahí!", color: "orange" };
+      return { text: "🦁 ¡RUGIDO PERFECTO!", color: "red" };
+   };
+
+   const volumeStatus = getVolumeStatus();
 
    if (!currentQuestion) {
       return null;
@@ -273,6 +219,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                                           : "hover:bg-gray-100 border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg"
                                     }`}
                                     onClick={() => handleAnswerSelect(index)}
+                                    disabled={isWaitingForRoar}
                                  >
                                     <span className="font-bold mr-3 text-base">{String.fromCharCode(65 + index)}.</span>
                                     <span>{option}</span>
@@ -280,21 +227,22 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                               ))}
                            </div>
 
-                           {/* Voice confirmation button */}
+                           {/* Voice confirmation section */}
                            <div className="space-y-3">
+                              {/* Botón principal de rugido */}
                               <Button
-                                 onClick={startListening}
-                                 disabled={selectedAnswer === null || isListening}
+                                 onClick={isWaitingForRoar ? handleStopRoarDetection : handleStartRoarDetection}
+                                 disabled={selectedAnswer === null}
                                  className={`w-full font-bold py-4 text-lg rounded-full shadow-xl transform transition-all duration-300 ${
-                                    isListening
+                                    isWaitingForRoar
                                        ? "bg-red-500 hover:bg-red-600 animate-pulse"
                                        : "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:scale-105"
                                  } text-white touch-button`}
                               >
-                                 {isListening ? (
+                                 {isWaitingForRoar ? (
                                     <>
                                        <MicOff className="w-6 h-6 mr-2" />
-                                       🎤 ¡RUGUE AHORA!
+                                       🎤 ¡RUGUE AHORA! - Detener
                                     </>
                                  ) : (
                                     <>
@@ -303,6 +251,62 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                                     </>
                                  )}
                               </Button>
+
+                              {/* Indicador de volumen en tiempo real */}
+                              {isWaitingForRoar && (
+                                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                                    <div
+                                       style={{
+                                          fontSize: "18px",
+                                          color: volumeStatus.color,
+                                          textAlign: "center",
+                                          marginBottom: "12px",
+                                          fontWeight: "bold",
+                                       }}
+                                    >
+                                       {volumeStatus.text}
+                                    </div>
+
+                                    {/* Barra de volumen visual */}
+                                    <div
+                                       style={{
+                                          width: "100%",
+                                          height: "24px",
+                                          backgroundColor: "rgba(255,255,255,0.3)",
+                                          borderRadius: "12px",
+                                          overflow: "hidden",
+                                          position: "relative",
+                                       }}
+                                    >
+                                       <div
+                                          style={{
+                                             width: `${volume}%`,
+                                             height: "100%",
+                                             backgroundColor: volumeStatus.color,
+                                             transition: "width 0.1s ease",
+                                             borderRadius: "12px",
+                                          }}
+                                       />
+
+                                       {/* Indicador del umbral */}
+                                       <div
+                                          style={{
+                                             position: "absolute",
+                                             left: `${ROAR_THRESHOLD}%`,
+                                             top: "0",
+                                             width: "2px",
+                                             height: "100%",
+                                             backgroundColor: "yellow",
+                                             boxShadow: "0 0 4px yellow",
+                                          }}
+                                       />
+                                    </div>
+
+                                    <div className="text-center text-white text-sm mt-2">
+                                       Volumen: {volume}% | Objetivo: {ROAR_THRESHOLD}%+
+                                    </div>
+                                 </div>
+                              )}
 
                               {selectedAnswer === null && (
                                  <p className="text-center text-gray-600 text-sm">⬆️ Primero selecciona una respuesta</p>
@@ -314,18 +318,10 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                                  </div>
                               )}
 
-                              {micPermission === "denied" && (
-                                 <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-3">
-                                    <p className="text-yellow-800 text-sm text-center">
-                                       🔒 Activa el micrófono en tu navegador para usar esta función
-                                    </p>
-                                 </div>
-                              )}
-
                               {/* Fallback button for manual confirmation */}
                               <Button
                                  onClick={handleConfirmAnswer}
-                                 disabled={selectedAnswer === null}
+                                 disabled={selectedAnswer === null || isWaitingForRoar}
                                  variant="outline"
                                  className="w-full border-2 border-blue-400 text-blue-600 hover:bg-blue-50 font-semibold py-2 rounded-full"
                               >
