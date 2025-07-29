@@ -130,20 +130,6 @@ export default function HomeScreen({ selectedTeam, onTeamSelect, onStartGame }: 
                >
                   {selectedTeam ? <>🚀 ¡INICIAR AVENTURA!</> : <>🔒 Elige una fraternidad</>}
                </Button>
-
-               {selectedTeam && selectedTeamData && (
-                  <div className="bg-white/20 backdrop-blur-sm rounded-2xl py-4 px-6 border-2 border-white/30 shadow-xl animate-bounce">
-                     <div className="flex items-center justify-center space-x-3">
-                        <span className="text-3xl">{selectedTeamData.emoji}</span>
-                        <div className="text-white text-center">
-                           <p className="text-lg font-bold">¡Excelente elección!</p>
-                           <p className="text-sm opacity-90">
-                              Has elegido <span className="font-bold text-yellow-300">{selectedTeamData.name}</span>
-                           </p>
-                        </div>
-                     </div>
-                  </div>
-               )}
             </div>
 
             {/* Instructions */}
