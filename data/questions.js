@@ -65,7 +65,7 @@ export const questions = {
          locationTitle: "🏕️ Local de Grupo",
          locationDescription: "Encuentra el local del grupo scout y busca el código en el mástil de banderas.",
          localImage: "/images/ROR_1.webp",
-         accessCode: "PAÑOL",
+         accessCode: "PANOL",
       },
       // SECCIÓN 2
       {
