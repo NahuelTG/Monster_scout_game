@@ -17,8 +17,8 @@ const teams = [
    {
       id: "roar-omega-roar",
       name: "Roar Omega Roar",
-      color: "bg-gradient-to-br from-blue-600 to-indigo-700",
-      hoverColor: "hover:from-blue-700 hover:to-indigo-800",
+      color: "bg-gradient-to-br from-red-600 to-orange-700",
+      hoverColor: "hover:from-red-700 hover:to-orange-800",
       emoji: "🦁",
       description: "Los más populares",
       accent: "border-blue-400",
@@ -27,12 +27,12 @@ const teams = [
    {
       id: "eta-hiss-hiss",
       name: "Eta Hiss Hiss",
-      color: "bg-gradient-to-br from-pink-500 to-purple-600",
-      hoverColor: "hover:from-pink-600 hover:to-purple-700",
+      color: "bg-gradient-to-br from-black-500 to-slate-600",
+      hoverColor: "hover:from-black-600 hover:to-slate-700",
       emoji: "🐍",
       description: "Las más elegantes",
-      accent: "border-pink-400",
-      textColor: "text-pink-100",
+      accent: "border-black-400",
+      textColor: "text-black-100",
    },
    {
       id: "pnk",
@@ -53,8 +53,6 @@ interface HomeScreenProps {
 }
 
 export default function HomeScreen({ selectedTeam, onTeamSelect, onStartGame }: HomeScreenProps) {
-   const selectedTeamData = teams.find((t) => t.id === selectedTeam);
-
    return (
       <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-green-500 p-4 relative overflow-hidden">
          {/* Animated background elements */}

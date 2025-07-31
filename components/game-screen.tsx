@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { questions } from "@/data/questions";
-import { Lock, Unlock, Mic, MicOff } from "lucide-react";
+import { Lock, Unlock, Mic, MicOff, Shield } from "lucide-react";
 import useMicrophone from "@/hooks/useMicrophone";
+import NextImage from "next/image";
 
 interface GameScreenProps {
    team: string;
@@ -24,7 +25,7 @@ interface Question {
    correctAnswer: number;
    locationTitle: string;
    locationDescription: string;
-   mapLink: string;
+   localImage: string;
    accessCode: string;
 }
 
@@ -39,12 +40,19 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
    const [voiceError, setVoiceError] = useState("");
    const [isWaitingForRoar, setIsWaitingForRoar] = useState(false);
 
+   // 🔐 Estados para confirmación sin voz
+   const [showConfirmationCode, setShowConfirmationCode] = useState(false);
+   const [confirmationCode, setConfirmationCode] = useState("");
+   const [confirmationError, setConfirmationError] = useState("");
+
    const teamKey = team as TeamKey;
    const currentQuestion: Question | undefined = questions[teamKey]?.[questionIndex];
    const { isListening, volume, error, startListening, stopListening } = useMicrophone();
 
    const ROAR_THRESHOLD = 30;
    const ROAR_TIMEOUT = 5000;
+   // 🔐 Código especial para confirmación manual (puedes cambiarlo)
+   const CONFIRMATION_CODE = "ADMIN";
 
    const handleConfirmAnswer = useCallback(() => {
       if (selectedAnswer === null) return;
@@ -119,6 +127,31 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       stopListening();
    };
 
+   // 🔐 Manejar confirmación sin voz
+   const handleRequestConfirmation = () => {
+      if (selectedAnswer === null) return;
+      setShowConfirmationCode(true);
+      setConfirmationError("");
+   };
+
+   const handleConfirmationSubmit = () => {
+      if (confirmationCode.toUpperCase() === CONFIRMATION_CODE) {
+         setShowConfirmationCode(false);
+         setConfirmationCode("");
+         setConfirmationError("");
+         handleConfirmAnswer();
+      } else {
+         setConfirmationError("❌ Código incorrecto. Contacta al organizador.");
+         setTimeout(() => setConfirmationError(""), 3000);
+      }
+   };
+
+   const handleCancelConfirmation = () => {
+      setShowConfirmationCode(false);
+      setConfirmationCode("");
+      setConfirmationError("");
+   };
+
    const handleCodeSubmit = () => {
       if (accessCode.toLowerCase() === currentQuestion?.accessCode.toLowerCase()) {
          onQuestionComplete(true);
@@ -142,6 +175,9 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
       setCodeError("");
       setVoiceError("");
       setIsWaitingForRoar(false);
+      setShowConfirmationCode(false);
+      setConfirmationCode("");
+      setConfirmationError("");
       stopListening();
    };
 
@@ -177,16 +213,16 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                {/* Header con mejor diseño */}
                <div className="text-center mb-8">
                   <div className="bg-white/20 backdrop-blur-sm rounded-full py-3 px-6 mb-4 border-2 border-white/30 shadow-xl">
-                     <h1 className="text-xl font-bold text-white drop-shadow-lg">🎯 Sección {questionIndex + 1} de 4</h1>
+                     <h1 className="text-xl font-bold text-white drop-shadow-lg">🎯 Sección {questionIndex + 1} de 5</h1>
                   </div>
 
                   {/* Progress bar mejorada */}
                   <div className="bg-white/20 rounded-full p-2 backdrop-blur-sm border border-white/30 shadow-lg">
-                     <div className="flex justify-center space-x-3">
-                        {[0, 1, 2, 3].map((i) => (
+                     <div className="flex justify-center space-x-2">
+                        {[0, 1, 2, 3, 4].map((i) => (
                            <div
                               key={i}
-                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${
                                  i < questionIndex
                                     ? "bg-green-500 text-white shadow-lg transform scale-110"
                                     : i === questionIndex
@@ -219,7 +255,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                                           : "hover:bg-gray-100 border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg"
                                     }`}
                                     onClick={() => handleAnswerSelect(index)}
-                                    disabled={isWaitingForRoar}
+                                    disabled={isWaitingForRoar || showConfirmationCode}
                                  >
                                     <span className="font-bold mr-3 text-base">{String.fromCharCode(65 + index)}.</span>
                                     <span>{option}</span>
@@ -227,115 +263,173 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                               ))}
                            </div>
 
+                           {/* 🔐 Modal de código de confirmación */}
+                           {showConfirmationCode && (
+                              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                 <Card className="w-full max-w-sm bg-white shadow-2xl border-4 border-yellow-400">
+                                    <CardHeader className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-t-lg">
+                                       <CardTitle className="text-center flex items-center justify-center space-x-2">
+                                          <Shield className="w-6 h-6" />
+                                          <span>🔐 Código de Autorización</span>
+                                       </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-6 space-y-4">
+                                       <p className="text-center text-gray-700 text-sm">
+                                          Para confirmar sin voz, ingresa el código del organizador:
+                                       </p>
+                                       <Input
+                                          type="password"
+                                          placeholder="Código de autorización"
+                                          value={confirmationCode}
+                                          onChange={(e) => setConfirmationCode(e.target.value.toUpperCase())}
+                                          className="text-center font-mono font-bold border-2 border-yellow-400 focus:border-yellow-500"
+                                          maxLength={10}
+                                       />
+                                       {confirmationError && (
+                                          <div className="bg-red-100 border-2 border-red-400 rounded-lg p-2">
+                                             <p className="text-red-700 text-sm text-center">{confirmationError}</p>
+                                          </div>
+                                       )}
+                                       <div className="flex space-x-2">
+                                          <Button
+                                             onClick={handleConfirmationSubmit}
+                                             disabled={confirmationCode.length === 0}
+                                             className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold"
+                                          >
+                                             ✅ Confirmar
+                                          </Button>
+                                          <Button
+                                             onClick={handleCancelConfirmation}
+                                             variant="outline"
+                                             className="flex-1 border-2 border-gray-400 text-gray-600 hover:bg-gray-100"
+                                          >
+                                             ❌ Cancelar
+                                          </Button>
+                                       </div>
+                                    </CardContent>
+                                 </Card>
+                              </div>
+                           )}
+
                            {/* Voice confirmation section */}
-                           <div className="space-y-3">
-                              {/* Botón principal de rugido */}
-                              <Button
-                                 onClick={isWaitingForRoar ? handleStopRoarDetection : handleStartRoarDetection}
-                                 disabled={selectedAnswer === null}
-                                 className={`w-full font-bold py-4 text-lg rounded-full shadow-xl transform transition-all duration-300 ${
-                                    isWaitingForRoar
-                                       ? "bg-red-500 hover:bg-red-600 animate-pulse"
-                                       : "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:scale-105"
-                                 } text-white touch-button`}
-                              >
-                                 {isWaitingForRoar ? (
-                                    <>
-                                       <MicOff className="w-6 h-6 mr-2" />
-                                       🎤 ¡RUGUE AHORA! - Detener
-                                    </>
-                                 ) : (
-                                    <>
-                                       <Mic className="w-6 h-6 mr-2" />
-                                       🦁 ¡CONFIRMA CON TU RUGIDO!
-                                    </>
-                                 )}
-                              </Button>
+                           {!showConfirmationCode && (
+                              <div className="space-y-3">
+                                 {/* Botón principal de rugido */}
+                                 <Button
+                                    onClick={isWaitingForRoar ? handleStopRoarDetection : handleStartRoarDetection}
+                                    disabled={selectedAnswer === null}
+                                    className={`w-full font-bold py-4 text-lg rounded-full shadow-xl transform transition-all duration-300 ${
+                                       isWaitingForRoar
+                                          ? "bg-red-500 hover:bg-red-600 animate-pulse"
+                                          : "bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 hover:scale-105"
+                                    } text-white touch-button`}
+                                 >
+                                    {isWaitingForRoar ? (
+                                       <>
+                                          <MicOff className="w-6 h-6 mr-2" />
+                                          🎤 ¡RUGUE AHORA! - Detener
+                                       </>
+                                    ) : (
+                                       <>
+                                          <Mic className="w-6 h-6 mr-2" />
+                                          🦁 ¡CONFIRMA CON TU RUGIDO!
+                                       </>
+                                    )}
+                                 </Button>
 
-                              {/* Indicador de volumen en tiempo real */}
-                              {isWaitingForRoar && (
-                                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                                    <div
-                                       style={{
-                                          fontSize: "18px",
-                                          color: volumeStatus.color,
-                                          textAlign: "center",
-                                          marginBottom: "12px",
-                                          fontWeight: "bold",
-                                       }}
-                                    >
-                                       {volumeStatus.text}
-                                    </div>
-
-                                    {/* Barra de volumen visual */}
-                                    <div
-                                       style={{
-                                          width: "100%",
-                                          height: "24px",
-                                          backgroundColor: "rgba(255,255,255,0.3)",
-                                          borderRadius: "12px",
-                                          overflow: "hidden",
-                                          position: "relative",
-                                       }}
-                                    >
+                                 {/* Indicador de volumen en tiempo real */}
+                                 {isWaitingForRoar && (
+                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
                                        <div
                                           style={{
-                                             width: `${volume}%`,
-                                             height: "100%",
-                                             backgroundColor: volumeStatus.color,
-                                             transition: "width 0.1s ease",
+                                             fontSize: "18px",
+                                             color: volumeStatus.color,
+                                             textAlign: "center",
+                                             marginBottom: "12px",
+                                             fontWeight: "bold",
+                                          }}
+                                       >
+                                          {volumeStatus.text}
+                                       </div>
+
+                                       {/* Barra de volumen visual */}
+                                       <div
+                                          style={{
+                                             width: "100%",
+                                             height: "24px",
+                                             backgroundColor: "rgba(255,255,255,0.3)",
                                              borderRadius: "12px",
+                                             overflow: "hidden",
+                                             position: "relative",
                                           }}
-                                       />
+                                       >
+                                          <div
+                                             style={{
+                                                width: `${volume}%`,
+                                                height: "100%",
+                                                backgroundColor: volumeStatus.color,
+                                                transition: "width 0.1s ease",
+                                                borderRadius: "12px",
+                                             }}
+                                          />
 
-                                       {/* Indicador del umbral */}
-                                       <div
-                                          style={{
-                                             position: "absolute",
-                                             left: `${ROAR_THRESHOLD}%`,
-                                             top: "0",
-                                             width: "2px",
-                                             height: "100%",
-                                             backgroundColor: "yellow",
-                                             boxShadow: "0 0 4px yellow",
-                                          }}
-                                       />
+                                          {/* Indicador del umbral */}
+                                          <div
+                                             style={{
+                                                position: "absolute",
+                                                left: `${ROAR_THRESHOLD}%`,
+                                                top: "0",
+                                                width: "2px",
+                                                height: "100%",
+                                                backgroundColor: "yellow",
+                                                boxShadow: "0 0 4px yellow",
+                                             }}
+                                          />
+                                       </div>
+
+                                       <div className="text-center text-white text-sm mt-2">
+                                          Volumen: {volume}% | Objetivo: {ROAR_THRESHOLD}%+
+                                       </div>
                                     </div>
+                                 )}
 
-                                    <div className="text-center text-white text-sm mt-2">
-                                       Volumen: {volume}% | Objetivo: {ROAR_THRESHOLD}%+
+                                 {selectedAnswer === null && (
+                                    <p className="text-center text-gray-600 text-sm">⬆️ Primero selecciona una respuesta</p>
+                                 )}
+
+                                 {voiceError && (
+                                    <div className="bg-red-100 border-2 border-red-400 rounded-lg p-3">
+                                       <p className="text-red-800 text-sm text-center font-medium">{voiceError}</p>
                                     </div>
-                                 </div>
-                              )}
+                                 )}
 
-                              {selectedAnswer === null && (
-                                 <p className="text-center text-gray-600 text-sm">⬆️ Primero selecciona una respuesta</p>
-                              )}
-
-                              {voiceError && (
-                                 <div className="bg-red-100 border-2 border-red-400 rounded-lg p-3">
-                                    <p className="text-red-800 text-sm text-center font-medium">{voiceError}</p>
-                                 </div>
-                              )}
-
-                              {/* Fallback button for manual confirmation */}
-                              <Button
-                                 onClick={handleConfirmAnswer}
-                                 disabled={selectedAnswer === null || isWaitingForRoar}
-                                 variant="outline"
-                                 className="w-full border-2 border-blue-400 text-blue-600 hover:bg-blue-50 font-semibold py-2 rounded-full"
-                              >
-                                 ✋ Confirmar sin voz
-                              </Button>
-                           </div>
+                                 {/* 🔐 Botón mejorado para confirmación manual */}
+                                 <Button
+                                    onClick={handleRequestConfirmation}
+                                    disabled={selectedAnswer === null || isWaitingForRoar}
+                                    variant="outline"
+                                    className="w-full border-2 border-gray-400 text-gray-600 hover:bg-gray-50 font-semibold py-2 rounded-full flex items-center justify-center space-x-2"
+                                 >
+                                    <Shield className="w-4 h-4" />
+                                    <span>🔐 Confirmar con Código</span>
+                                 </Button>
+                              </div>
+                           )}
                         </>
                      ) : (
                         <div className="text-center">
                            {isCorrect ? (
                               <div className="space-y-6">
-                                 <div className="text-8xl mb-4 animate-bounce">🎉</div>
-                                 <h3 className="text-3xl font-bold text-green-600 mb-4">¡RESPUESTA CORRECTA!</h3>
-                                 <div className="text-2xl">🏆✨🎊</div>
+                                 <div className="text-5xl mb-4 animate-bounce">🎉</div>
+                                 <h3 className="text-xl font-bold text-green-600 mb-4">¡RESPUESTA CORRECTA!</h3>
+                                 <h3 className="text-2xl font-bold text-blue-600 mb-4">Ubicación para la obtención del código</h3>
+                                 <NextImage
+                                    src={currentQuestion.localImage}
+                                    alt={`Ubicación: ${currentQuestion.locationTitle}`}
+                                    width={500}
+                                    height={350}
+                                    className="rounded-lg shadow-lg object-cover"
+                                 />
 
                                  {showMap && (
                                     <div className="space-y-4">
@@ -377,13 +471,7 @@ export default function GameScreen({ team, questionIndex, onQuestionComplete, on
                               <div className="space-y-6">
                                  <div className="text-8xl mb-4 animate-bounce">😞</div>
                                  <h3 className="text-3xl font-bold text-red-600 mb-4">¡Respuesta Incorrecta!</h3>
-                                 <div className="bg-red-100 border-4 border-red-400 rounded-lg p-4 mb-4">
-                                    <p className="text-red-800 font-semibold text-lg">
-                                       ✅ La respuesta correcta era:
-                                       <br />
-                                       <strong className="text-xl">{currentQuestion.options[currentQuestion.correctAnswer]}</strong>
-                                    </p>
-                                 </div>
+
                                  <Button
                                     onClick={handleTryAgain}
                                     className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold py-4 text-lg rounded-full shadow-lg transform transition-all duration-300 hover:scale-105"
